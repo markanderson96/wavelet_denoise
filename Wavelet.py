@@ -1,6 +1,6 @@
 # identical to pywt.wavelet class
 
-import numpy as numpy
+import numpy as np
 
 class Wavelet:
     def __init__(self, name):
@@ -16,6 +16,6 @@ class Wavelet:
             self.rec_lo = np.asarray(filter_bank[2], dtype=np.float64)
             self.rec_hi = np.asarray(filter_bank[3], dtype=np.float64)
 
-        if (self.dec_lo.ndim != 1) or (self.dec_hi.ndim != 1) or (self.rec_lo != 1) or (self.rec_hi.ndim != 1):
+        if (self.dec_lo.ndim != 1) or (self.dec_hi.ndim != 1) or (self.rec_lo.ndim != 1) or (self.rec_hi.ndim != 1):
             e = "ERROR: filters must be one dimensional"
             raise ValueError(e)

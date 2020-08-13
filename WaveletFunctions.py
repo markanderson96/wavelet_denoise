@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.fftpack as fft
-from scipy import signal 
+from scipy import signal
+import math
 import Wavelet
 
 class WaveletFunctions:
@@ -55,6 +56,46 @@ class WaveletFunctions:
         
         return level
     
+    def reconstructWP(self, node, antialias=False, antialiasFilter=False):
+        """
+        Reconstruct the signal from a wavelet packet decomposition
+        Makes use of wavelet and data from current instance
+
+        Returns: reconstructed signal
+        """
+
+        wv = self.wavelet
+        data = self.tree[node]
+        
+        lvl = math.floor(math.log2(node + 1))
+        # position of node in its level
+        nodepos = node - (2**lvl - 1)
+        # gray coded as wp not in natural order
+        # nodepos = self.graycode(nodepos)
+        # number of nodes
+        numnodes = 2**(lvl+1)
+
+        # reconstruction wavlets and lengths
+        wv_rec_hi = wv.rec_hi
+        wv_rec_lo = wv.rec_lo
+
+        wv_hi_len = len(wv_rec_hi)
+        wv_lo_len = len(wv_rec_lo)
+
+        # perform convolutions to get signal and upsample
+        if not isinstance(data, np.ndarray):
+            data = np.asarray(data, dtype='float64')
+
+        if node % 2 == 0:
+            data = np.convolve(data, wv_rec_hi, 'same')
+        else:
+            data = np.convolve(data, wv_rec_lo, 'same')
+
+        data = data[wv_hi_len//2-1 : -(wv_lo_len//2-1)]
+
+        return data
+        
+
     def WaveletPacket(self, nodes, mode='symmetric', antialias=False, antialiasFilter=True):
         """
         Reimplementation of pwwt.WaveletPacket
@@ -97,9 +138,9 @@ class WaveletFunctions:
         # loop over possible parent nodes and construnct WPD
         for node in range(2**maxlevel-1):
             childa = node*2 + 1
-            childb = node*2 + 2
+            childd = node*2 + 2
             # if not relevant, set children to empty to keep tree structure
-            if childa not in nodes and childb not in nodes:
+            if childa not in nodes and childd not in nodes:
                 self.tree.append(np.array([]))
                 self.tree.append(np.array([]))
                 continue
@@ -128,11 +169,9 @@ class WaveletFunctions:
                         # take fft and set coefficients to 0
                         ft = fft.fft(nexta)
                         ft[ll//4 : 3*ll//4] = 0
-                        nexta = np.real(fft.ifft(ft))
-                        
+                        nexta = np.real(fft.ifft(ft))         
                # store A
-               self.tree.append(nexta)
-
+                self.tree.append(nexta)
             else:
                 self.tree.append(np.array([]))
 
@@ -149,10 +188,8 @@ class WaveletFunctions:
                         ft = fft.fft(nextd)
                         ft[ll//4 : 3*ll//4] = 0
                         nextd = np.real(fft.ifft(ft))
-                        
                # store A
-               self.tree.append(nextd)
-
+                self.tree.append(nextd)
             else:
                 self.tree.append(np.array([]))
 
@@ -163,11 +200,11 @@ class WaveletFunctions:
 
         Returns: list of new tree leaves
         """
-        nnodes = 2 ** (wp.maxlevel + ) - 1
+        nnodes = 2 ** (wp.maxLevel + 1) - 1
         cost = np.zeors(nnodes)
         count = 0
 
-        for level in range(wp.maxlevel + 1):
+        for level in range(wp.maxLevel + 1):
             for n in wp.get_level(level, 'natural'):
                 d = np.abs(n.data)
                 cost[count] = np.sum(d > threshold)
@@ -175,8 +212,8 @@ class WaveletFunctions:
 
         # compute best tree from these costs
         flags = 2 * np.ones(nnodes)
-        flags[2 ** wp.maxlevel - 1:] = 1
-        inds = np.arange(2 ** wp.maxlevel - 1)
+        flags[2 ** wp.maxLevel - 1:] = 1
+        inds = np.arange(2 ** wp.maxLevel - 1)
         inds = inds[-1::-1]
 
         for i in inds:
@@ -240,7 +277,7 @@ class WaveletFunctions:
 
         # create wavelet decomposition
         allnodes = range(2 ** (self.maxLevel + 1) - 1)
-        self.WaveletPacket(allnodes, 'symmetric', aaWP, antialiasFilter=True)
+        wp = self.WaveletPacket(allnodes, 'symmetric', aaWP, antialiasFilter=True)
 
         # get the threshold
         det1 = self.tree[2]
@@ -249,7 +286,7 @@ class WaveletFunctions:
         threshold = self.thresholdMultiplier * sigma
 
         # NOTE: Node order in best tree not the same
-        bestleaves = self.BestTree()
+        bestleaves = self.BestTree(wp, threshold)
         print("Keeping leaves: ", bestleaves)
 
         # thresholding
